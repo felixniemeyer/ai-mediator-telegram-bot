@@ -1,0 +1,6 @@
+node_modules
+sessions
+mediations
+test-mediations
+yarn-error.log
+.env

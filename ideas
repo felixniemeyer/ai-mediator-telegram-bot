@@ -1,0 +1,39 @@
+[reverse]
+
+# todo
+- nachrichten schicken, wenn die chatgpt antwort zurück kommt
+
+- ask for the name "what's the name the others will most likely know you by?"
+
+# neu gedacht
+Also, weil das nicht so leicht klappt mit dem button, wie ich es wollte, mache ich es jetzt so: 
+Wenn man eine mediation initiiert sagt man die Namen der beteiligten Personen.
+
+# ideen
+
+- feedback nach beendeter runde
+  - speichere ich dann in eine datei
+  - und werte es bei gelegenheit aus
+
+# start
+
+So, bots, geil. 
+Ich glaube ich kann nochmal ein bisschen neu denken:
+
+Cool wäre es doch so: 
+
+Man macht eine neue Mediation auf. 
+Optional gibt man die Namen der Teilnehmer ein (wenn nicht jeder teilnehemen dürfen soll). 
+
+Dann clicken die Leute auf "teilnehmen" und gelangen in den private chat. 
+  - /participate sessionId
+
+Und da passiert dann alles. 
+Das Eingeben der Perspektive. 
+Die Rückmeldung. 
+
+Und in der Gruppe wird vielleicht nochmal gesagt wie viele Teilnehmer es hilfreich fanden oder so. 
+Oder dass es abgeschlossen ist
+
+- 
+
