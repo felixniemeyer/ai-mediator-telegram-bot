@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon --ignore mediations/ bot.ts", 
     "test": "export DONT_CALL_CHAT_GPT=true ; export STORAGE_PATH='test-mediations' ; rm -rf $STORAGE_PATH ; mkdir $STORAGE_PATH ; ts-node test.ts", 
-    "online-test": "export STORAGE_PATH='test-mediations' ; rm -rf $STORAGE_PATH ; mkdir $STORAGE_PATH ; ts-node test.ts"
+    "test:online": "export STORAGE_PATH='test-mediations' ; rm -rf $STORAGE_PATH ; mkdir $STORAGE_PATH ; ts-node test.ts"
   },
   "devDependencies": {
     "@types/node": "^18.15.0",

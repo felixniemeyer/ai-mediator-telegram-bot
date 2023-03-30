@@ -3,7 +3,7 @@ dotenv.config();
 
 import * as lib from './lib';
 
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, Context, InlineKeyboard } from "grammy";
 import { User } from 'grammy/out/types.node';
 
 const bot = new Bot(process.env.BOT_TOKEN!)
@@ -61,12 +61,12 @@ bot.command('start', async (ctx) => {
       )
 
       if(status.participantCount > 1) {
-        const closeMessage = `Click on close if you don't expect any more participants`
+        const closeMessage = "\nClick on close if you don't expect any more participants."
         const keyboard = new InlineKeyboard()
           .text("close", Actions.closeMediation + ' ' + chatId + ' ' + id)
 
         ctx.api.sendMessage(
-          chatId, joinMessage + " " + closeMessage, 
+          chatId, joinMessage + closeMessage, 
           { 
             reply_markup: keyboard
           }
@@ -77,7 +77,7 @@ bot.command('start', async (ctx) => {
           previousCloseButtonMessages[jointId] = msg
         })
       } else {
-        ctx.api.sendMessage(chatId, joinMessage) 
+        ctx.api.sendMessage(chatId, joinMessage + "\nWe need at least one other participant.") 
       }
     })
   } 
@@ -104,18 +104,18 @@ function maybeRemoveCloseButtonFromPreviousMessage(api: any, jointId: string) {
 
 bot.command("mediate", async (ctx) => {
   if(ctx.message) {
-    const titleStart = ctx.message.text.indexOf(' ')
-    if(titleStart == -1) {
-      ctx.reply("Provide a title when creating a new mediation");
+    const chatId = ctx.message.chat.id;
+    let chatMembers = await ctx.api.getChatMemberCount(chatId);
+    if(chatMembers < 3) {
+      ctx.reply(
+        "You need to create mediations in a group chat with other people." + 
+        "This is our private chat."
+      );
     } else {
+      const titleStart = ctx.message.text.indexOf(' ')
       const mediationTitle = ctx.message.text.substring(titleStart + 1, 256)
-      const chatId = ctx.message.chat.id;
-      let chatMembers = await ctx.api.getChatMemberCount(chatId);
-      if(chatMembers < 3) {
-        ctx.reply(
-          "There is only you and me in this chat." + 
-          "You need to create a mediation in a group chat with other people."
-        );
+      if(titleStart == -1) {
+        ctx.reply("When creating a new mediation, please provide a title as a reference like so: /mediate <i>title</i>");
       } else {
         lib.createMediation(mediationTitle, chatId)
           .then((mediation) => {
@@ -162,22 +162,33 @@ bot.on('callback_query', async (ctx) => {
         chatId, 
         `Mediation "${mediationTitle}" has been closed by ${makeMention(ctx.from!)}.`
       )
-      lib.checkWhetherMediationIsReadyAndConsultChatGPT(mediationId).then((status) => {
+      const onAnswer = makeOnAnswerReady(ctx, mediationTitle)
+      lib.checkWhetherMediationIsReadyAndConsultChatGPT(mediationId, onAnswer).then((status) => {
         if(status.finished) {
           ctx.api.sendMessage(
             chatId, 
-            `Mediation results for "${mediationTitle}" are ready! Check your private chat.`
+            `I am reading through all your perspectives regarding mediation "${mediationTitle}". Check our private chat, I'll be writing to you.`
           )
         } else {
           ctx.api.sendMessage(
             chatId, 
-            `So far received ${status.receivedPerspectivesCount} of ${status.participantCount} perspectives.`
+            `So far received ${status.receivedPerspectivesCount} of ${status.participantCount} perspectives.` +
+            `Waiting for the remaining ${status.participantCount! - status.receivedPerspectivesCount!}`
           )
         }
       })
     }) 
   }
 })
+
+function makeOnAnswerReady(ctx: Context, mediationTitle: string) {
+  return (chatId: number, answer: string) => {
+    ctx.api.sendMessage(
+      chatId, 
+      `Regarding mediation "${mediationTitle}": ${answer}`
+    )
+  }
+}
 
 bot.on("message", async (ctx) => {
   const userId = ctx.from.id
@@ -191,12 +202,13 @@ bot.on("message", async (ctx) => {
       ctx.reply(message)
       const intro = `${makeMention(ctx.from!)} has submitted their perspective on mediation "${s1.mediationTitle}".\n`
       if(s1.mediationClosed) {
-        lib.checkWhetherMediationIsReadyAndConsultChatGPT(mediationId).then((s2) => {
+        const onAnswer = makeOnAnswerReady(ctx, s1.mediationTitle)
+        lib.checkWhetherMediationIsReadyAndConsultChatGPT(mediationId, onAnswer).then((s2) => {
           
           if(s2.finished) {
             ctx.api.sendMessage(
               mediationId.chatId, 
-              intro + `Mediation results are ready! Check your private chat.`
+              `Now that everyone has submitted their perspective, let me read through all of them. I'll be writing to you in private chat.`
             )
           } else {
             if(s2.receivedPerspectivesCount == s2.participantCount) {

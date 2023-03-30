@@ -162,7 +162,10 @@ interface checkAndConsultResponse {
   receivedPerspectivesCount?: number,
   participantCount?: number,
 }
-export function checkWhetherMediationIsReadyAndConsultChatGPT(mediationId: MediationId) {
+export function checkWhetherMediationIsReadyAndConsultChatGPT(
+  mediationId: MediationId, 
+  onAnswerReady: (userId: number, answer: string) => void
+) {
   return new Promise<checkAndConsultResponse>(async (resolve, _reject) => {
     loadMediation(mediationId, async (mediation) => {
       console.log('checkWhetherMediationIsReadyAndConsultChatGPT', mediation)
@@ -200,7 +203,7 @@ export function checkWhetherMediationIsReadyAndConsultChatGPT(mediationId: Media
           }
         }) 
         if(participantCount == receivedPerspectivesCount) {
-          consultChatGPT(mediation, perspectives)
+          consultChatGPT(mediation, perspectives, onAnswerReady)
           resolve({
             finished: true,
           })
@@ -217,7 +220,11 @@ export function checkWhetherMediationIsReadyAndConsultChatGPT(mediationId: Media
   })
 }
 
-function consultChatGPT(mediation: Mediation, perspectives: {[userId: string]: string}) {
+function consultChatGPT(
+  mediation: Mediation, 
+  perspectives: {[userId: string]: string}, 
+  onAnswerReady: (userId: number, answer: string) => void
+) {
   // load all perspectives from fs
   const participants = mediation.participants
   participants.forEach((participant, i: number) => {
@@ -226,29 +233,29 @@ function consultChatGPT(mediation: Mediation, perspectives: {[userId: string]: s
     const perspective = perspectives[userId]
 
     const nameList = participants.map((participant: any) => participant.name);
+    const nameString = nameList.slice(0,-1).join(', ') + ' and ' + nameList.slice(-1)[0];
+    let frame = `Hey ChatGPT, there are ${participants.length} people who have a conflict: ${nameString}. Everyone has his own perspective on the conflict. Please read their versions of the truth and give ${name} some suggestions on how to deal with the situation in a constructive way.`
 
-    let frame = `Hey ChatGPT, there are ${participants.length} people who have a conflict. Their names are (${nameList.join(', ')}). Everyone has his own perspective on the conflict. Please read their versions of the truth and give ${name} some suggestions on how to deal with the situation in a constructive way.`
-
-    let perspectivesString = `Here are the other peoples' perspectives: \n\n`
+    let othersPerspectivesString = `Here are the other peoples' perspectives:\n\n`
 
     let messages = [{"role": "system", "content": frame}] as ChatCompletionRequestMessage[]
     for(let j = 1; j < participants.length; j++) {
       const index = (i + j) % participants.length;
       const otherParticipant = participants[index];
       const otherPerspective = perspectives[otherParticipant.userId];
-      perspectivesString += `${otherParticipant.name}:\n ${otherPerspective}`
+      othersPerspectivesString += `Person ${j}, ${otherParticipant.name}:\n${otherPerspective}`
     }
 
-    messages.push({"role": "system", "content": perspectivesString})
+    messages.push({"role": "system", "content": othersPerspectivesString})
 
-    messages.push({"role": "system", "content": `Here comes ${name}'s perspective:`})
+    messages.push({"role": "system", "content": `Here is the user's (${name}) perspective:`})
 
     messages.push({
       "role": 'user',
       "content": perspective
     })
 
-    messages.push({"role": "system", "content": `Please give ${name} some suggestions on how to deal with the situation in a constructive way or what to reflect about. Answer in the same language as ${name} used in his message.`})
+    messages.push({"role": "system", "content": `Please give the user (${name}) some suggestions on how to deal with the situation in a constructive way or what to reflect about. Answer in the same language as the user (${name}) used in his message.`})
 
     const callParams = {
       model: "gpt-3.5-turbo-0301",
@@ -266,7 +273,8 @@ function consultChatGPT(mediation: Mediation, perspectives: {[userId: string]: s
           if(!answer) {
             throw(new Error('no answer or unexpected answer format'))
           } else {
-            fs.writeFile(answerFile(mediation.id, participant.userId), answer, (err) => {
+            onAnswerReady(userId, answer)
+            fs.writeFile(answerFile(mediation.id, userId), answer, (err) => {
               if (err) {
                 console.log(err);
               }
