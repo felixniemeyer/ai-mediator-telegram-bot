@@ -8,9 +8,9 @@ import { User } from 'grammy/out/types.node';
 
 const bot = new Bot(process.env.BOT_TOKEN!)
 
-const helpMessage = `I am a bot based on ChatGPT that helps people to find solutions in interpersonal conflicts. You can initiate a new mediation by sending\n/mediate <i>title</i>\n in any group chat.\n\nAnyone can then join the mediation and participate by explaining to me in a private chat, what is their perspective on the situation. After reading all perspective I will try to give helpful ideas how to handle the situation to each participant. `
+const helpMessage = `I am a bot based on ChatGPT that helps people to find solutions in interpersonal conflicts. You can initiate a new mediation by sending the following command in any group chat:\n/mediate <title>\n\nAnyone can then join the mediation and participate by explaining to me in a private chat, what is their perspective on the situation. After reading all perspective I will try to give helpful ideas how to handle the situation to each participant. `
 
-const startErrorMessage = `Don't /start me manually in private chat. Follow a link by clicking on the participate button in a group chat instead. Create such a link in a group with the\n/mediate <i>title</i>\ncommand.`
+const startErrorMessage = `Don't try to start me manually in private chat. Follow a link by clicking on the participate button in a group chat instead. Create such a link in a group with the following command:\n/mediate <title>`
 
 enum Actions {
   closeMediation = 'C'
@@ -30,6 +30,7 @@ function makeMention(user: User) {
 bot.command("help", ctx => ctx.reply(helpMessage))
 
 bot.command('start', async (ctx) => {
+  console.log('got here twice') 
   const spaceSplit = ctx.message!.text.split(" ")
   if(spaceSplit.length < 2) {
     ctx.reply(startErrorMessage)
@@ -53,31 +54,33 @@ bot.command('start', async (ctx) => {
     lib.participate(userId, userName, mediationId).then(status => {
       usersCurrentMediations[userId] = mediationId
 
-      const joinMessage = `${makeMention(ctx.from!)} has joined the mediation "${status.mediationTitle}".`
       ctx.reply(status.alreadyJoined ? 
         `Welcome back to the mediation "${status.mediationTitle}". What is your perspective on the situation? ` : 
         `Thank you for participating in the mediation "${status.mediationTitle}". ` 
           + '\nPlease tell me your perspective on the situation.'
       )
 
-      if(status.participantCount > 1) {
-        const closeMessage = "\nClick on close if you don't expect any more participants."
-        const keyboard = new InlineKeyboard()
-          .text("close", Actions.closeMediation + ' ' + chatId + ' ' + id)
+      if(!status.alreadyJoined) {
+        const joinMessage = `${makeMention(ctx.from!)} has joined the mediation "${status.mediationTitle}". Tell me your perspective in the private chat. `
+        if(status.participantCount > 1) { //TBD change to 1
+          const closeMessage = "\nClick on close if you don't expect any more participants."
+          const keyboard = new InlineKeyboard()
+            .text("close", Actions.closeMediation + ' ' + chatId + ' ' + id)
 
-        ctx.api.sendMessage(
-          chatId, joinMessage + closeMessage, 
-          { 
-            reply_markup: keyboard
-          }
-        )
-        .then(msg => {
-          const jointId = lib.joinMediationId(mediationId)
-          maybeRemoveCloseButtonFromPreviousMessage(ctx.api, jointId)
-          previousCloseButtonMessages[jointId] = msg
-        })
-      } else {
-        ctx.api.sendMessage(chatId, joinMessage + "\nWe need at least one other participant.") 
+          ctx.api.sendMessage(
+            chatId, joinMessage + closeMessage, 
+            { 
+              reply_markup: keyboard
+            }
+          )
+          .then(msg => {
+            const jointId = lib.joinMediationId(mediationId)
+            maybeRemoveCloseButtonFromPreviousMessage(ctx.api, jointId)
+            previousCloseButtonMessages[jointId] = msg
+          })
+        } else {
+          ctx.api.sendMessage(chatId, joinMessage + "\nWe need at least one other participant.") 
+        }
       }
     })
   } 
@@ -115,7 +118,7 @@ bot.command("mediate", async (ctx) => {
       const titleStart = ctx.message.text.indexOf(' ')
       const mediationTitle = ctx.message.text.substring(titleStart + 1, 256)
       if(titleStart == -1) {
-        ctx.reply("When creating a new mediation, please provide a title as a reference like so: /mediate <i>title</i>");
+        ctx.reply("When creating a new mediation, please provide a title as a reference like so:\n/mediate <title>");
       } else {
         lib.createMediation(mediationTitle, chatId)
           .then((mediation) => {
@@ -192,64 +195,69 @@ function makeOnAnswerReady(ctx: Context, mediationTitle: string) {
 
 bot.on("message", async (ctx) => {
   const userId = ctx.from.id
-  const mediationId = usersCurrentMediations[userId]
-  if(mediationId) {
-    lib.storePerspective(mediationId, userId, ctx.message.text!).then((s1) => {
-      let message = `Thank you for telling me your perspective for mediation "${s1.mediationTitle}".`
-      if(s1.alreadyStored) {
-        message = `You have overridden your perspective for mediation "${s1.mediationTitle}".`
-      }
-      ctx.reply(message)
-      const intro = `${makeMention(ctx.from!)} has submitted their perspective on mediation "${s1.mediationTitle}".\n`
-      if(s1.mediationClosed) {
-        const onAnswer = makeOnAnswerReady(ctx, s1.mediationTitle)
-        lib.checkWhetherMediationIsReadyAndConsultChatGPT(mediationId, onAnswer).then((s2) => {
-          
-          if(s2.finished) {
-            ctx.api.sendMessage(
-              mediationId.chatId, 
-              `Now that everyone has submitted their perspective, let me read through all of them. I'll be writing to you in private chat.`
-            )
-          } else {
-            if(s2.receivedPerspectivesCount == s2.participantCount) {
-              if(s2.participantCount == 1) {
-                ctx.api.sendMessage(
-                  mediationId.chatId, 
-                  intro + `Waiting for at least 2 participants.`
-                )
-              } else {
-                const keyboard = new InlineKeyboard()
-                  .text("close", Actions.closeMediation + ' ' + mediationId.chatId + ' ' + mediationId.id)
-
-                ctx.api.sendMessage(
-                  mediationId.chatId, intro + `If you want to get results, close the mediation.`, 
-                  { 
-                    reply_markup: keyboard
-                  }
-                )
-                .then(msg => {
-                  const jointId = lib.joinMediationId(mediationId)
-                  maybeRemoveCloseButtonFromPreviousMessage(ctx.api, jointId)
-                  previousCloseButtonMessages[jointId] = msg
-                })
-              }
-            } else {
+  if(ctx.chat.id != userId) {
+    // ignore 
+  } else {
+    // now we're talking privately
+    const mediationId = usersCurrentMediations[userId]
+    if(mediationId) {
+      lib.storePerspective(mediationId, userId, ctx.message.text!).then((s1) => {
+        let message = `Thank you for telling me your perspective for mediation "${s1.mediationTitle}".`
+        if(s1.alreadyStored) {
+          message = `You have overridden your perspective for mediation "${s1.mediationTitle}".`
+        }
+        ctx.reply(message)
+        const intro = `${makeMention(ctx.from!)} has submitted their perspective on mediation "${s1.mediationTitle}".\n`
+        if(s1.mediationClosed) {
+          const onAnswer = makeOnAnswerReady(ctx, s1.mediationTitle)
+          lib.checkWhetherMediationIsReadyAndConsultChatGPT(mediationId, onAnswer).then((s2) => {
+            
+            if(s2.finished) {
               ctx.api.sendMessage(
                 mediationId.chatId, 
-                intro + `So far I received ${s2.receivedPerspectivesCount} of ${s2.participantCount} perspectives.`
+                `Now that everyone has submitted their perspective, let me read through all of them. I'll be writing to you in private chat.`
               )
+            } else {
+              if(s2.receivedPerspectivesCount == s2.participantCount) {
+                if(s2.participantCount == 1) {
+                  ctx.api.sendMessage(
+                    mediationId.chatId, 
+                    intro + `Waiting for at least 2 participants.`
+                  )
+                } else {
+                  const keyboard = new InlineKeyboard()
+                    .text("close", Actions.closeMediation + ' ' + mediationId.chatId + ' ' + mediationId.id)
+
+                  ctx.api.sendMessage(
+                    mediationId.chatId, intro + `If you want to get results, close the mediation.`, 
+                    { 
+                      reply_markup: keyboard
+                    }
+                  )
+                  .then(msg => {
+                    const jointId = lib.joinMediationId(mediationId)
+                    maybeRemoveCloseButtonFromPreviousMessage(ctx.api, jointId)
+                    previousCloseButtonMessages[jointId] = msg
+                  })
+                }
+              } else {
+                ctx.api.sendMessage(
+                  mediationId.chatId, 
+                  intro + `So far I received ${s2.receivedPerspectivesCount} of ${s2.participantCount} perspectives.`
+                )
+              }
             }
-          }
-        })
-      } else {
-        ctx.api.sendMessage(
-          mediationId.chatId,
-          intro
-        )
-      }
-    })
-  } else {
-    ctx.reply(helpMessage)
+          })
+        } else {
+          ctx.api.sendMessage(
+            mediationId.chatId,
+            intro
+          )
+        }
+      })
+    } else {
+      ctx.reply(helpMessage)
+    }
   }
 }) 
 

@@ -90,7 +90,9 @@ async function loadMediation(
       mediationFileQueues[jointId].push(resolve)
     })
   } else {
-    const data = await fs.promises.readFile(mediationFile(mediationId), 'utf8')
+    const file = mediationFile(mediationId)
+    console.log(file) 
+    const data = await fs.promises.readFile(file, 'utf8')
     mediation = JSON.parse(data.toString())
     mediationFileLocks.add(jointId)
   }
@@ -99,7 +101,7 @@ async function loadMediation(
   } catch {
   } finally {
     const queue = mediationFileQueues[jointId]
-    if(queue && queue.length > 0) {
+    if(queue && queue.length > 1) {
       const next = queue.shift()!
       next(mediation)
     } else {
@@ -147,7 +149,7 @@ export function participate(userId: number, name: string, mediationId: Mediation
 export function closeMediation(mediationId: MediationId) {
   return new Promise<string>(async (resolve, reject) => {
     loadMediation(mediationId, async (mediation) => {
-      if(mediation.participants.length > 1) {
+      if(mediation.participants.length > 0) {
         mediation.state = 'closed'
         resolve(mediation.title)
       } else {
@@ -255,16 +257,15 @@ function consultChatGPT(
       "content": perspective
     })
 
-    messages.push({"role": "system", "content": `Please give the user (${name}) some suggestions on how to deal with the situation in a constructive way or what to reflect about. Answer in the same language as the user (${name}) used in his message.`})
+    messages.push({"role": "system", "content": `Please give the user (${name}) some suggestions on how to deal with the situation in a constructive way or what to reflect about. Answer in the same language as the user (${name}) used in his message. If you think something is amiss or there is a misunderstanding, suggest 'starting a new mediation in the group chat'.`})
 
     const callParams = {
       model: "gpt-3.5-turbo-0301",
       messages: messages,
     }
 
-    if(DONT_CALL_CHAT_GPT) {
-      console.log('dry run, chatGPT request:', callParams)
-    } else {
+    console.log('chatGPT request:', callParams)
+    if(!DONT_CALL_CHAT_GPT) {
       openai.createChatCompletion(callParams).then((response) => {
         console.log(response.data);
         console.log(JSON.stringify(response.data))
