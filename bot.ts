@@ -8,9 +8,9 @@ import { User } from 'grammy/out/types.node';
 
 const bot = new Bot(process.env.BOT_TOKEN!)
 
-const helpMessage = `I am a bot based on ChatGPT that helps people to find solutions in interpersonal conflicts. You can initiate a new mediation with /mediate in any group chat. Anyone can participate and explain to me in a private chat, what's his perspective on the troublesome situation. Once everyone has done so and somebody notifies me with '/evalute', I'll send out a private message to each of you in which I try to make helpful suggestions on how to deal with the situation in a constructive way. `
+const helpMessage = `I am a bot based on ChatGPT that helps people to find solutions in interpersonal conflicts. You can initiate a new mediation by sending\n/mediate <i>title</i>\n in any group chat.\n\nAnyone can then join the mediation and participate by explaining to me in a private chat, what is their perspective on the situation. After reading all perspective I will try to give helpful ideas how to handle the situation to each participant. `
 
-const startErrorMessage = `Don't /start me manually in private chat. Follow a link by clicking on the participate button in a group chat instead. Create such a link in a group with the /mediate command.`
+const startErrorMessage = `Don't /start me manually in private chat. Follow a link by clicking on the participate button in a group chat instead. Create such a link in a group with the\n/mediate <i>title</i>\ncommand.`
 
 enum Actions {
   closeMediation = 'C'
