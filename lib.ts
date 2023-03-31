@@ -82,14 +82,18 @@ async function loadMediation(
   mediationId: MediationId, 
   callback: (mediation: Mediation) => Promise<void>
 ) {
+  console.log('loading mediation') 
   const jointId = joinMediationId(mediationId)
   let mediation 
   if(mediationFileLocks.has(jointId)) {
+    console.log('mediation currently locked') 
     mediationFileQueues[jointId] = mediationFileQueues[jointId] || []
     mediation = await new Promise((resolve) => {
+      console.log('queueing', jointId)
       mediationFileQueues[jointId].push(resolve)
     })
   } else {
+    console.log('loading mediation from file') 
     const file = mediationFile(mediationId)
     console.log(file) 
     const data = await fs.promises.readFile(file, 'utf8')
@@ -98,13 +102,17 @@ async function loadMediation(
   }
   try{
     await callback(mediation)
-  } catch {
+  } catch(err) {
+    console.error("Something failed when executing callback with mediation", err)
   } finally {
+    console.log('checking if there are queued callbacks')
     const queue = mediationFileQueues[jointId]
-    if(queue && queue.length > 1) {
+    if(queue && (queue.length > 0)) {
+      console.log('yes there are') 
       const next = queue.shift()!
       next(mediation)
     } else {
+      console.log('no there are not, saving to file')
       saveMediation(mediation) 
       mediationFileLocks.delete(jointId)
     }
@@ -149,7 +157,7 @@ export function participate(userId: number, name: string, mediationId: Mediation
 export function closeMediation(mediationId: MediationId) {
   return new Promise<string>(async (resolve, reject) => {
     loadMediation(mediationId, async (mediation) => {
-      if(mediation.participants.length > 0) {
+      if(mediation.participants.length > 1) {
         mediation.state = 'closed'
         resolve(mediation.title)
       } else {
@@ -217,6 +225,9 @@ export function checkWhetherMediationIsReadyAndConsultChatGPT(
             participantCount,
           })
         }
+      })
+      .catch((err) => {
+        console.log(err)
       })
     })
   })
@@ -295,6 +306,7 @@ interface StorePerspectiveResponse {
   alreadyStored: boolean,
   mediationTitle: string,
   mediationClosed: boolean,
+  participantCount: number,
 }
 
 export function storePerspective(mediationId: MediationId, userId: number, perspective: string) {
@@ -323,6 +335,7 @@ export function storePerspective(mediationId: MediationId, userId: number, persp
           alreadyStored, 
           mediationTitle: mediation.title,
           mediationClosed: mediation.state === 'closed',
+          participantCount: mediation.participants.length,
         }) 
       }
     })
